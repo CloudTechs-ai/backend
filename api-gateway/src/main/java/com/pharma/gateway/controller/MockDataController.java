@@ -16,9 +16,9 @@ public class MockDataController {
     @GetMapping(value = "/distribution", produces = MediaType.APPLICATION_JSON_VALUE)
     public Mono<List<Map<String, Object>>> getDistribution() {
         return Mono.just(List.of(
-            Map.of("id", 1, "shipmentNumber", "SHIP-2024-001", "destination", "Atlanta, Georgia", "carrier", "BlueDart Logistics", "dispatchDate", "2027-04-05", "estimatedArrival", "2027-04-07", "status", "ACTIVE"),
-            Map.of("id", 2, "shipmentNumber", "SHIP-2024-002", "destination", "Seattle, Washington", "carrier", "DHL Express", "dispatchDate", "2027-04-06", "estimatedArrival", "2027-04-08", "status", "ACTIVE"),
-            Map.of("id", 3, "shipmentNumber", "SHIP-2024-003", "destination", "Tampa, Florida", "carrier", "FedEx", "dispatchDate", "2027-04-08", "estimatedArrival", "2027-04-10", "status", "ACTIVE")
+            Map.of("id", 1, "shipmentNumber", "SHIP-2027-001", "destination", "Atlanta, Georgia", "carrier", "BlueDart Logistics", "dispatchDate", "2027-04-05", "estimatedArrival", "2027-04-07", "status", "ACTIVE"),
+            Map.of("id", 2, "shipmentNumber", "SHIP-2027-002", "destination", "Seattle, Washington", "carrier", "DHL Express", "dispatchDate", "2027-04-06", "estimatedArrival", "2027-04-08", "status", "ACTIVE"),
+            Map.of("id", 3, "shipmentNumber", "SHIP-2027-003", "destination", "Tampa, Florida", "carrier", "FedEx", "dispatchDate", "2027-04-08", "estimatedArrival", "2027-04-10", "status", "ACTIVE")
         ));
     }
 
