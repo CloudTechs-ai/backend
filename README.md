@@ -1,170 +1,498 @@
-# zen-pharma-backend
+# Med Pharma Backend
 
-Spring Boot microservices monorepo for the Zen Pharma platform. Contains 7 backend services built with Java 17 and deployed to AWS EKS via GitOps (ArgoCD).
+Production-oriented **Spring Boot microservices platform** powering the Med Pharma application. The backend is built with **Java 17**, containerized with Docker, deployed to **AWS EKS**, and managed through a **GitOps workflow with ArgoCD**.
 
-> **Companion repos:**
-> - [`zen-infra`](https://github.com/your-github-username/zen-infra) — Terraform for AWS infrastructure (EKS, RDS, ECR, IAM)
-> - [`zen-pharma-frontend`](https://github.com/your-github-username/zen-pharma-frontend) — React frontend
-> - [`zen-gitops`](https://github.com/your-github-username/zen-gitops) — ArgoCD apps + Helm values
+The platform is designed around independently deployable services, automated security scanning, infrastructure as code, and environment promotion through Git.
 
----
+## 🏗️ Architecture
 
-## Services
+```text
+                                      ┌──────────────────────┐
+                                      │      End Users       │
+                                      │  Web / API Clients   │
+                                      └──────────┬───────────┘
+                                                 │
+                                                 ▼
+                                      ┌──────────────────────┐
+                                      │     AWS ALB /        │
+                                      │   Ingress Controller  │
+                                      └──────────┬───────────┘
+                                                 │
+                                                 ▼
+                              ┌──────────────────────────────────┐
+                              │          AWS EKS Cluster          │
+                              │                                  │
+                              │   ┌──────────────────────────┐   │
+                              │   │       API Gateway         │   │
+                              │   │  Spring Cloud Gateway     │   │
+                              │   │          :8080            │   │
+                              │   └────────────┬─────────────┘   │
+                              │                │                 │
+                              │      ┌─────────┼─────────┐       │
+                              │      │         │         │       │
+                              │      ▼         ▼         ▼       │
+                              │  ┌────────┐ ┌────────┐ ┌────────┐│
+                              │  │  Auth  │ │  Drug  │ │Inventory││
+                              │  │ :8081  │ │Catalog │ │ :8083  ││
+                              │  └────┬───┘ │ :8082  │ └────┬───┘│
+                              │       │     └────┬───┘      │    │
+                              │       │          │          │    │
+                              │       ▼          ▼          ▼    │
+                              │  ┌────────────────────────────────┐
+                              │  │          PostgreSQL / RDS       │
+                              │  │                                │
+                              │  │  Auth │ Catalog │ Inventory     │
+                              │  │  Manufacturing │ Supplier       │
+                              │  └────────────────────────────────┘
+                              │                                  │
+                              │  ┌──────────────┐ ┌──────────────┐│
+                              │  │Manufacturing │ │   Supplier   ││
+                              │  │    :8084     │ │    :8085     ││
+                              │  └──────────────┘ └──────────────┘│
+                              │                                  │
+                              │  ┌──────────────────────────────┐│
+                              │  │     Notification Service      ││
+                              │  │      Node.js / Express :8086  ││
+                              │  └──────────────────────────────┘│
+                              └──────────────────────────────────┘
+                                                 │
+                                                 ▼
+                                      ┌──────────────────────┐
+                                      │ Notification Providers│
+                                      │     Email / SMS       │
+                                      └──────────────────────┘
 
-| Service | Description | Port | DB |
-|---|---|---|---|
-| `api-gateway` | Spring Cloud Gateway — routes all external traffic | 8080 | No |
-| `auth-service` | JWT authentication and user management | 8081 | PostgreSQL |
-| `drug-catalog-service` | Drug catalogue — search, categories, formulary | 8082 | PostgreSQL |
-| `inventory-service` | Stock levels, replenishment, batch tracking | 8083 | PostgreSQL |
-| `manufacturing-service` | Production orders and batch manufacturing | 8084 | PostgreSQL |
-| `supplier-service` | Supplier management and purchase orders | 8085 | PostgreSQL |
-| `notification-service` | Email/SMS notifications (Node.js 20 / Express) | 8086 | No |
 
----
-
-## Repository Structure
-
+     ┌────────────────────────────────────────────────────────────────┐
+     │                         GitOps / CI-CD                         │
+     │                                                                │
+     │  Developer                                                     │
+     │      │                                                         │
+     │      ▼                                                         │
+     │  GitHub ──► GitHub Actions                                     │
+     │                │                                               │
+     │                ├── Gitleaks                                    │
+     │                ├── Maven / Tests / JaCoCo                      │
+     │                ├── CodeQL                                      │
+     │                ├── Semgrep                                     │
+     │                ├── OWASP Dependency Check                      │
+     │                ├── Docker Build                                │
+     │                ├── Trivy                                       │
+     │                ├── Cosign                                      │
+     │                └── Push Image ───────────────► AWS ECR         │
+     │                                                                │
+     │                              │                                 │
+     │                              ▼                                 │
+     │                         med-gitops                             │
+     │                              │                                 │
+     │                              ▼                                 │
+     │                           ArgoCD                               │
+     │                              │                                 │
+     │                              ▼                                 │
+     │                         AWS EKS                                │
+     └────────────────────────────────────────────────────────────────┘
 ```
-zen-pharma-backend/
+
+### Architecture Flow
+
+```text
+Developer
+   │
+   ▼
+GitHub Repository
+   │
+   ▼
+GitHub Actions
+   │
+   ├── Test
+   ├── Security Scan
+   ├── Build
+   ├── Container Scan
+   └── Sign Image
+   │
+   ▼
+AWS ECR
+   │
+   ▼
+Med-gitops
+   │
+   ▼
+ArgoCD
+   │
+   ▼
+AWS EKS
+   │
+   ├── API Gateway
+   ├── Auth Service
+   ├── Drug Catalog
+   ├── Inventory
+   ├── Manufacturing
+   ├── Supplier
+   └── Notifications
+   │
+   ▼
+Amazon RDS PostgreSQL
+```
+
+## ☁️ Platform Overview
+
+| Layer               | Technology                       |
+| ------------------- | -------------------------------- |
+| Application         | Java 17 / Spring Boot            |
+| API Gateway         | Spring Cloud Gateway             |
+| Notifications       | Node.js 20 / Express             |
+| Containers          | Docker                           |
+| Orchestration       | Kubernetes / AWS EKS             |
+| Database            | PostgreSQL / Amazon RDS          |
+| Container Registry  | Amazon ECR                       |
+| Infrastructure      | Terraform                        |
+| CI/CD               | GitHub Actions                   |
+| GitOps              | ArgoCD                           |
+| Security            | Gitleaks, CodeQL, Semgrep, Trivy |
+| Dependency Security | OWASP Dependency-Check           |
+| Image Signing       | Cosign / Sigstore                |
+| AWS Authentication  | GitHub OIDC                      |
+
+## 🧩 Microservices
+
+The platform consists of seven independently deployable backend services.
+
+| Service           | Responsibility                                           |   Port | Database   |
+| ----------------- | -------------------------------------------------------- | -----: | ---------- |
+| **API Gateway**   | External API routing and service entry point             | `8080` | —          |
+| **Auth Service**  | Authentication, JWT issuance, and user management        | `8081` | PostgreSQL |
+| **Drug Catalog**  | Drug search, categories, and formulary management        | `8082` | PostgreSQL |
+| **Inventory**     | Inventory levels, replenishment, and batch tracking      | `8083` | PostgreSQL |
+| **Manufacturing** | Production orders and pharmaceutical batch manufacturing | `8084` | PostgreSQL |
+| **Supplier**      | Supplier management and purchase orders                  | `8085` | PostgreSQL |
+| **Notification**  | Email and SMS notification processing                    | `8086` | —          |
+
+Each service can be built, tested, containerized, and deployed independently.
+
+## 🔄 CI/CD Pipeline
+
+Changes to `develop` and `release/**` trigger the complete deployment pipeline.
+
+```text
+Commit
+  │
+  ▼
+Secret Detection ──► Gitleaks
+  │
+  ▼
+Build & Test ──────► Maven + Integration Tests
+  │
+  ▼
+Coverage ──────────► JaCoCo ≥ 80%
+  │
+  ▼
+SAST ──────────────► CodeQL + Semgrep
+  │
+  ▼
+Dependency Scan ───► OWASP Dependency-Check
+  │
+  ▼
+Container Build ───► Docker
+  │
+  ▼
+Image Security ────► Trivy
+  │
+  ▼
+Image Registry ────► Amazon ECR
+  │
+  ▼
+Image Signing ─────► Cosign / Sigstore
+  │
+  ▼
+GitOps Update ─────► med-gitops
+  │
+  ▼
+ArgoCD Sync
+  │
+  ▼
+AWS EKS
+  │
+  ▼
+DEV Environment
+  │
+  ▼
+QA Promotion PR
+```
+
+### Feature Branch Pipeline
+
+Feature branches use a lightweight validation pipeline:
+
+```text
+Feature Branch
+     │
+     ├── Gitleaks
+     ├── Tests
+     ├── JaCoCo
+     ├── CodeQL
+     ├── Semgrep
+     └── Dependency Check
+```
+
+Docker builds, ECR publishing, and deployment are intentionally excluded from feature branch validation.
+
+## 🔐 Security Architecture
+
+Security is integrated directly into the software delivery lifecycle.
+
+### Application Security
+
+* CodeQL SAST
+* Semgrep security rules
+* OWASP Top 10 detection
+* OWASP Dependency-Check
+* Gitleaks secret detection
+* JaCoCo test coverage enforcement
+
+### Container Security
+
+* Multi-stage Docker builds
+* Non-root container execution
+* Trivy vulnerability scanning
+* HIGH/CRITICAL vulnerability detection
+* `ignore-unfixed` vulnerability policy
+
+### Supply Chain Security
+
+Container images are signed using **Cosign keyless signing** through GitHub OIDC, Fulcio, and Rekor.
+
+```text
+GitHub Actions
+      │
+      ▼
+GitHub OIDC Identity
+      │
+      ▼
+   Fulcio
+      │
+      ▼
+Signed Container Image
+      │
+      ▼
+    Rekor
+```
+
+### AWS Authentication
+
+GitHub Actions authenticates to AWS using **OIDC federation** rather than storing long-lived AWS access keys in GitHub secrets.
+
+```text
+GitHub Actions
+      │
+      ▼
+GitHub OIDC
+      │
+      ▼
+AWS IAM Role
+      │
+      ▼
+AWS Resources
+```
+
+## 🌎 Environment Promotion
+
+Deployment follows a GitOps-based promotion model.
+
+```text
+Feature Branch
+      │
+      ▼
+   develop
+      │
+      ▼
+     DEV
+      │
+      ▼
+   QA PR
+      │
+      ▼
+  QA Environment
+      │
+      ▼
+Manual PROD Promotion
+      │
+      ▼
+    PROD
+```
+
+Production deployments are manually initiated through `promote-prod.yml`, providing an explicit promotion gate between environments.
+
+## 🌿 Branching Strategy
+
+| Branch       | Purpose                          | Pipeline                 |
+| ------------ | -------------------------------- | ------------------------ |
+| `feat/*`     | New feature development          | Lightweight CI           |
+| `fix/*`      | Bug fixes                        | Lightweight CI           |
+| `chore/*`    | Maintenance                      | Lightweight CI           |
+| `develop`    | Integration                      | Full CI + DEV deployment |
+| `release/**` | Release / hotfix                 | Full CI + DEV deployment |
+| `main`       | Stable production-aligned branch | PR validation            |
+
+## 📁 Repository Structure
+
+```text
+med-pharma-backend/
+│
 ├── api-gateway/
-│   ├── src/
-│   ├── pom.xml
-│   └── Dockerfile
 ├── auth-service/
-│   └── ...
 ├── drug-catalog-service/
-│   └── ...
 ├── inventory-service/
-│   └── ...
 ├── manufacturing-service/
-│   └── ...
-├── notification-service/          ← Node.js (not Java)
-│   └── ...
+├── notification-service/
 ├── supplier-service/
-│   └── ...
-└── .github/
-    └── workflows/
-        ├── _java-build.yml        ← Reusable: full Java CI pipeline
-        ├── _java-pr-check.yml     ← Reusable: lightweight PR check
-        ├── _node-build.yml        ← Reusable: full Node.js CI pipeline
-        ├── _node-pr-check.yml     ← Reusable: lightweight Node PR check
-        ├── ci-<service>.yml       ← Full build + DEV deploy + QA PR (7 files)
-        ├── ci-pr-<service>.yml    ← Feature branch check (7 files)
-        └── promote-prod.yml       ← Manual PROD promotion trigger
+│
+├── .github/
+│   └── workflows/
+│       ├── _java-build.yml
+│       ├── _java-pr-check.yml
+│       ├── _node-build.yml
+│       ├── _node-pr-check.yml
+│       │
+│       ├── ci-api-gateway.yml
+│       ├── ci-auth-service.yml
+│       ├── ci-drug-catalog-service.yml
+│       ├── ci-inventory-service.yml
+│       ├── ci-manufacturing-service.yml
+│       ├── ci-notification-service.yml
+│       ├── ci-supplier-service.yml
+│       │
+│       ├── ci-pr-api-gateway.yml
+│       ├── ci-pr-auth-service.yml
+│       ├── ci-pr-drug-catalog-service.yml
+│       ├── ci-pr-inventory-service.yml
+│       ├── ci-pr-manufacturing-service.yml
+│       ├── ci-pr-notification-service.yml
+│       ├── ci-pr-supplier-service.yml
+│       │
+│       └── promote-prod.yml
+│
+└── README.md
 ```
 
----
-
-## CI Pipeline Overview
-
-Every push to `develop` or `release/**` runs the full pipeline for the changed service:
-
-```
-1. Gitleaks (secret scan)
-2. Maven verify + JaCoCo coverage (≥ 80%)  — real PostgreSQL sidecar for DB services
-3. CodeQL SAST (security-extended queries)
-4. Semgrep SAST (p/java, p/spring-boot, p/owasp-top-ten)
-5. OWASP Dependency Check (CVSS ≥ 7.0)
-6. Docker build (multi-stage, non-root UID 1000)
-7. Trivy image scan (HIGH/CRITICAL, ignore-unfixed)
-8. ECR push → tag: sha-<7chars>
-9. Cosign keyless sign (GitHub OIDC → Fulcio → Rekor)
-10. Update envs/dev/values-<service>.yaml in zen-gitops → ArgoCD auto-syncs dev
-11. Open QA promotion PR in zen-gitops
-```
-
-Feature branch pushes run only steps 1–5 (~5 min, no Docker/ECR).
-
-**Authentication to AWS:** GitHub OIDC (no `AWS_ACCESS_KEY_ID` stored as a secret).
-
-See [`zen-infra/docs/CICD-IMPLEMENTATION.md`](https://github.com/your-github-username/zen-infra/blob/main/docs/CICD-IMPLEMENTATION.md) for full architecture details.
-
----
-
-## Branching Strategy
-
-| Branch | Purpose | CI |
-|---|---|---|
-| `feat/*`, `fix/*`, `chore/*` | Feature development | Lightweight: test + SAST only |
-| `develop` | Integration branch | Full pipeline + DEV deploy |
-| `release/**` | Sprint release / hotfix | Full pipeline + DEV deploy |
-| `main` | Stable / matches production | PR check only |
-
-PROD is promoted manually via `promote-prod.yml` (workflow_dispatch with service dropdown).
-
----
-
-## Local Development
+## 🛠️ Local Development
 
 ### Prerequisites
-- Java 17 (`sdk install java 17-tem`)
-- Maven 3.9+
-- Docker Desktop
-- PostgreSQL 15 (for DB services)
 
-### Run a service locally
+* Java 17
+* Maven 3.9+
+* Docker Desktop
+* PostgreSQL 15
+* Git
+
+### Run a Service
 
 ```bash
-# Auth service example
 cd auth-service
 
-# Start PostgreSQL (Docker)
 docker run -d --name pharma-db \
   -e POSTGRES_DB=pharma \
   -e POSTGRES_USER=pharma \
   -e POSTGRES_PASSWORD=pharma \
-  -p 5432:5432 postgres:15-alpine
+  -p 5432:5432 \
+  postgres:15-alpine
 
-# Set environment variables
 export SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/pharma
 export SPRING_DATASOURCE_USERNAME=pharma
 export SPRING_DATASOURCE_PASSWORD=pharma
 export JWT_SECRET=local-dev-secret
 
-# Run
 mvn spring-boot:run
 ```
 
-### Run tests
+### Run Tests
 
 ```bash
-cd auth-service
-mvn verify                        # unit + integration tests + JaCoCo coverage
-mvn verify -Pintegration-tests    # integration tests only
+mvn verify
 ```
 
-### Build Docker image locally
+### Build a Container
 
 ```bash
-cd auth-service
 docker build -t auth-service:local .
 docker run -p 8081:8081 auth-service:local
 ```
 
----
+## 🚀 Deployment Architecture
 
-## Required GitHub Secrets
+The platform is separated into three repositories following infrastructure, application, and configuration concerns.
 
-Set in **Settings → Secrets and variables → Actions**:
+```text
+┌────────────────────┐
+│   med-infra        │
+│                    │
+│ Terraform          │
+│ AWS / EKS / RDS    │
+│ IAM / ECR          │
+└─────────┬──────────┘
+          │
+          ▼
+┌────────────────────┐
+│ med-pharma-backend  │
+│                    │
+│ Microservices      │
+│ CI/CD              │
+│ Docker Images      │
+└─────────┬──────────┘
+          │
+          ▼
+┌────────────────────┐
+│    med-gitops      │
+│                    │
+│ Helm Values        │
+│ ArgoCD Apps        │
+│ Environment Config │
+└─────────┬──────────┘
+          │
+          ▼
+       AWS EKS
+```
 
-| Secret | Description |
-|---|---|
-| `AWS_ACCOUNT_ID` | 12-digit AWS account ID |
-| `GITOPS_TOKEN` | GitHub PAT with `contents: write` on `your-github-username/zen-gitops` |
-| `SEMGREP_APP_TOKEN` | Semgrep Cloud token (optional) |
-| `NVD_API_KEY` | NIST NVD API key for OWASP Dep Check (optional, faster) |
+### Companion Repositories
 
-| Variable | Value |
-|---|---|
-| `GITOPS_REPO` | `your-github-username/zen-gitops` |
+* **`med-infra`** — Terraform infrastructure for AWS, EKS, RDS, ECR, IAM, and supporting resources.
+* **`med-pharma-frontend`** — React frontend application.
+* **`med-gitops`** — Kubernetes/Helm configuration and ArgoCD applications.
 
----
+## 🔑 Required GitHub Configuration
 
-## Full Deployment Guide
+### Secrets
 
-See [`zen-infra/docs/FULL-DEPLOYMENT-GUIDE.md`](https://github.com/your-github-username/zen-infra/blob/main/docs/FULL-DEPLOYMENT-GUIDE.md) for the complete 4-stage deployment:
-1. Provision infrastructure (Terraform via GitHub Actions in zen-infra)
-2. Install K8s prerequisites (scripts in zen-infra)
-3. CI pipeline (this repo — auto-triggered on push to develop)
-4. ArgoCD CD (zen-gitops — ArgoCD watches this after step 2 setup)
+| Secret              | Purpose                                         |
+| ------------------- | ----------------------------------------------- |
+| `AWS_ACCOUNT_ID`    | AWS account identifier                          |
+| `GITOPS_TOKEN`      | GitHub token for updating the GitOps repository |
+| `SEMGREP_APP_TOKEN` | Semgrep Cloud authentication                    |
+| `NVD_API_KEY`       | NIST vulnerability database API access          |
+
+### Repository Variables
+
+| Variable      | Value                                              |
+| ------------- | -------------------------------------------------- |
+| `GITOPS_REPO` | GitOps repository used for environment deployments |
+
+## 🎯 Design Goals
+
+The backend is designed around several core engineering principles:
+
+* **Microservice isolation** — services can evolve and deploy independently.
+* **Infrastructure as Code** — AWS infrastructure is managed through Terraform.
+* **GitOps deployments** — Kubernetes state is managed declaratively through Git.
+* **Automated security** — security scanning is part of every CI pipeline.
+* **Immutable artifacts** — container images are versioned and signed before deployment.
+* **Least-privilege access** — AWS authentication uses short-lived OIDC credentials.
+* **Automated testing** — integration tests run against real PostgreSQL dependencies.
+* **Environment promotion** — DEV, QA, and PROD deployments follow controlled promotion paths.
+* **Cloud-native architecture** — workloads are containerized and orchestrated with Kubernetes on AWS EKS.
+
+## 📌 Platform Summary
+
+**Med Pharma** combines:
+
+`Java 17` → `Spring Boot` → `Docker` → `AWS EKS` → `Amazon RDS` → `Terraform` → `GitHub Actions` → `ArgoCD` → `GitOps`
+
+The result is a cloud-native backend platform with automated testing, security validation, container supply-chain controls, and Kubernetes-based deployment.
